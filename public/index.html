@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>JohnnyClub Neuro</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #2b2b2f;
+    --text: var(--tg-theme-text-color, #f2f2f2);
+    --hint: var(--tg-theme-hint-color, #a0a0a5);
+    --link: var(--tg-theme-link-color, #2481cc);
+    --button: var(--tg-theme-button-color, #2481cc);
+    --button-text: var(--tg-theme-button-text-color, #ffffff);
+    --secondary-bg: #3a3a3f;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
+  }
+  #app {
+    display: flex; flex-direction: column; height: 100vh; position: relative;
+  }
+  #header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 10px; font-weight: 600; font-size: 17px;
+    border-bottom: 1px solid var(--secondary-bg);
+  }
+  #header .headerTitle { flex: 1; text-align: center; }
+  .iconBtn {
+    background: none; border: none; color: var(--text); font-size: 20px;
+    padding: 6px 10px; cursor: pointer; line-height: 1;
+  }
+  #messages {
+    flex: 1; overflow-y: auto; padding: 12px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .msg {
+    max-width: 80%; padding: 10px 14px; border-radius: 16px;
+    line-height: 1.4; font-size: 15px; white-space: pre-wrap; word-wrap: break-word;
+  }
+  .msg.user {
+    align-self: flex-end; background: var(--button); color: var(--button-text);
+    border-bottom-right-radius: 4px;
+  }
+  .msg.bot {
+    align-self: flex-start; background: var(--secondary-bg); color: var(--text);
+    border-bottom-left-radius: 4px;
+  }
+  .msg.typing { opacity: 0.6; font-style: italic; }
+  .msg img { max-width: 100%; border-radius: 10px; display: block; margin-top: 4px; }
+  #modeBar {
+    padding: 6px 12px; font-size: 12px; color: var(--hint);
+    display: none; align-items: center; gap: 6px;
+  }
+  #modeBar.active { display: flex; }
+  #inputBar {
+    display: flex; gap: 8px; padding: 10px 12px; align-items: flex-end;
+    border-top: 1px solid var(--secondary-bg); background: var(--bg);
+  }
+  #imageModeBtn {
+    background: var(--secondary-bg); border: none; color: var(--text);
+    border-radius: 20px; width: 40px; height: 40px; font-size: 18px; cursor: pointer; flex-shrink: 0;
+  }
+  #imageModeBtn.active { background: var(--button); color: var(--button-text); }
+  #textInput {
+    flex: 1; border: 1px solid var(--secondary-bg); border-radius: 20px;
+    padding: 10px 16px; font-size: 15px; background: var(--secondary-bg); color: var(--text);
+    outline: none; resize: none;
+  }
+  #sendBtn {
+    background: var(--button); color: var(--button-text); border: none;
+    border-radius: 20px; padding: 0 18px; font-size: 15px; font-weight: 600;
+    cursor: pointer;
+  }
+  #sendBtn:disabled { opacity: 0.5; }
+  .empty-state {
+    text-align: center; color: var(--hint); margin-top: 40px; font-size: 14px; padding: 0 20px;
+  }
+
+  /* Боковая панель истории */
+  #overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.4);
+    display: none; z-index: 5;
+  }
+  #overlay.open { display: block; }
+  #sidebar {
+    position: absolute; top: 0; left: 0; bottom: 0; width: 78%; max-width: 300px;
+    background: var(--bg); border-right: 1px solid var(--secondary-bg);
+    transform: translateX(-100%); transition: transform 0.2s ease;
+    display: flex; flex-direction: column; z-index: 6;
+  }
+  #sidebar.open { transform: translateX(0); }
+  #sidebarHeader {
+    padding: 14px 16px; font-weight: 600; border-bottom: 1px solid var(--secondary-bg);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  #newChatBtn {
+    background: var(--button); color: var(--button-text); border: none;
+    border-radius: 12px; padding: 8px 12px; font-size: 13px; cursor: pointer; margin: 10px 16px;
+  }
+  #sessionList { flex: 1; overflow-y: auto; padding: 0 8px; }
+  .sessionItem {
+    display: flex; align-items: center; gap: 6px;
+    padding: 10px 8px; border-radius: 10px; cursor: pointer; margin-bottom: 4px;
+    font-size: 14px;
+  }
+  .sessionItem:hover, .sessionItem.current { background: var(--secondary-bg); }
+  .sessionItem .sTitle {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .sessionItem .sDelete {
+    background: none; border: none; color: var(--hint); font-size: 16px; cursor: pointer;
+  }
+  .sidebarHint { color: var(--hint); font-size: 12px; padding: 8px 16px 14px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="overlay"></div>
+  <div id="sidebar">
+    <div id="sidebarHeader">
+      <span>История чатов</span>
+      <button class="iconBtn" id="closeSidebarBtn">✕</button>
+    </div>
+    <button id="newChatBtn">＋ Новый чат</button>
+    <div id="sessionList"></div>
+    <div class="sidebarHint">Хранятся последние 10 чатов</div>
+  </div>
+
+  <div id="header">
+    <button class="iconBtn" id="openSidebarBtn">☰</button>
+    <div class="headerTitle">🤖 JohnnyClub Neuro</div>
+    <button class="iconBtn" id="headerNewChatBtn">✎</button>
+  </div>
+
+  <div id="messages">
+    <div class="empty-state" id="emptyState">Задай любой вопрос — нейросеть ответит прямо здесь.</div>
+  </div>
+
+  <div id="modeBar"><span>🎨 Режим генерации изображений — опишите, что нарисовать</span></div>
+
+  <div id="inputBar">
+    <button id="imageModeBtn" title="Режим изображений">🎨</button>
+    <textarea id="textInput" rows="1" placeholder="Напишите вопрос..."></textarea>
+    <button id="sendBtn">➤</button>
+  </div>
+</div>
+
+<script>
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+  }
+
+  // ВАЖНО: если фронтенд и бэкенд на одном домене — оставьте пустую строку.
+  // Если разместили отдельно, впишите сюда адрес бэкенда, например:
+  // const API_URL = 'https://мой-сервер.onrender.com';
+  const API_URL = '';
+
+  const GREETING = 'Привет! Я - JohnnyClub Neuro, помогу тебе чем смогу!';
+  const STORAGE_KEY = 'johnnyclub_neuro_sessions';
+  const MAX_SESSIONS = 10;
+
+  const messagesEl = document.getElementById('messages');
+  const inputEl = document.getElementById('textInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const emptyState = document.getElementById('emptyState');
+  const imageModeBtn = document.getElementById('imageModeBtn');
+  const modeBar = document.getElementById('modeBar');
+
+  const overlay = document.getElementById('overlay');
+  const sidebar = document.getElementById('sidebar');
+  const openSidebarBtn = document.getElementById('openSidebarBtn');
+  const closeSidebarBtn = document.getElementById('closeSidebarBtn');
+  const newChatBtn = document.getElementById('newChatBtn');
+  const headerNewChatBtn = document.getElementById('headerNewChatBtn');
+  const sessionListEl = document.getElementById('sessionList');
+
+  let sessions = loadSessions();       // массив последних 10 чатов
+  let currentSessionId = null;
+  let imageMode = false;
+
+  // ---------- Хранилище (localStorage) ----------
+  function loadSessions() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveSessions() {
+    // Оставляем только последние 10 чатов
+    sessions = sessions
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, MAX_SESSIONS);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+  }
+
+  function getCurrentSession() {
+    return sessions.find((s) => s.id === currentSessionId);
+  }
+
+  function createSession() {
+    const session = {
+      id: 'chat_' + Date.now(),
+      title: 'Новый чат',
+      messages: [{ role: 'assistant', content: GREETING }],
+      updatedAt: Date.now(),
+    };
+    sessions.unshift(session);
+    saveSessions();
+    currentSessionId = session.id;
+    renderSessionList();
+    renderMessages();
+  }
+
+  function switchSession(id) {
+    currentSessionId = id;
+    renderSessionList();
+    renderMessages();
+    closeSidebar();
+  }
+
+  function deleteSession(id, evt) {
+    evt.stopPropagation();
+    sessions = sessions.filter((s) => s.id !== id);
+    saveSessions();
+    if (currentSessionId === id) {
+      if (sessions.length > 0) {
+        currentSessionId = sessions[0].id;
+      } else {
+        createSession();
+        return;
+      }
+    }
+    renderSessionList();
+    renderMessages();
+  }
+
+  // ---------- Боковая панель ----------
+  function renderSessionList() {
+    sessionListEl.innerHTML = '';
+    sessions
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .forEach((s) => {
+        const item = document.createElement('div');
+        item.className = 'sessionItem' + (s.id === currentSessionId ? ' current' : '');
+        item.innerHTML =
+          '<span class="sTitle"></span><button class="sDelete" title="Удалить">🗑</button>';
+        item.querySelector('.sTitle').textContent = s.title || 'Новый чат';
+        item.addEventListener('click', () => switchSession(s.id));
+        item.querySelector('.sDelete').addEventListener('click', (e) => deleteSession(s.id, e));
+        sessionListEl.appendChild(item);
+      });
+  }
+
+  function openSidebar() {
+    sidebar.classList.add('open');
+    overlay.classList.add('open');
+  }
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    overlay.classList.remove('open');
+  }
+
+  openSidebarBtn.addEventListener('click', openSidebar);
+  closeSidebarBtn.addEventListener('click', closeSidebar);
+  overlay.addEventListener('click', closeSidebar);
+  newChatBtn.addEventListener('click', () => { createSession(); closeSidebar(); });
+  headerNewChatBtn.addEventListener('click', () => createSession());
+
+  // ---------- Сообщения ----------
+  function renderMessages() {
+    const session = getCurrentSession();
+    messagesEl.innerHTML = '';
+    if (!session || session.messages.length === 0) {
+      emptyState.style.display = 'block';
+      messagesEl.appendChild(emptyState);
+      return;
+    }
+    emptyState.style.display = 'none';
+    session.messages.forEach((m) => addMessageEl(m.role, m.content, m.type));
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function addMessageEl(role, content, type) {
+    const div = document.createElement('div');
+    div.className = 'msg ' + (role === 'user' ? 'user' : 'bot');
+    if (type === 'image') {
+      const img = document.createElement('img');
+      img.src = content;
+      div.appendChild(img);
+    } else {
+      div.textContent = content;
+    }
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return div;
+  }
+
+  function pushMessage(role, content, type) {
+    const session = getCurrentSession();
+    session.messages.push({ role, content, type });
+    session.updatedAt = Date.now();
+    if (session.title === 'Новый чат' && role === 'user') {
+      session.title = content.slice(0, 30);
+    }
+    saveSessions();
+    renderSessionList();
+  }
+
+  // ---------- Режим изображений ----------
+  imageModeBtn.addEventListener('click', () => {
+    imageMode = !imageMode;
+    imageModeBtn.classList.toggle('active', imageMode);
+    modeBar.classList.toggle('active', imageMode);
+    inputEl.placeholder = imageMode ? 'Опишите изображение...' : 'Напишите вопрос...';
+  });
+
+  // ---------- Отправка ----------
+  async function sendMessage() {
+    const text = inputEl.value.trim();
+    if (!text) return;
+
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    sendBtn.disabled = true;
+
+    emptyState.style.display = 'none';
+    addMessageEl('user', text);
+    pushMessage('user', text);
+
+    if (imageMode) {
+      await handleImageRequest(text);
+    } else {
+      await handleChatRequest();
+    }
+
+    sendBtn.disabled = false;
+  }
+
+  async function handleChatRequest() {
+    const session = getCurrentSession();
+    const typingEl = addMessageEl('bot', 'печатает...');
+    typingEl.classList.add('typing');
+
+    try {
+      // На сервер уходит вся история, а сервер сам берёт последние 10 сообщений
+      const historyForApi = session.messages
+        .filter((m) => m.type !== 'image')
+        .map((m) => ({ role: m.role, content: m.content }));
+
+      const res = await fetch(API_URL + '/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: historyForApi }),
+      });
+      const data = await res.json();
+
+      typingEl.remove();
+
+      if (!res.ok) {
+        addMessageEl('bot', 'Ошибка: ' + (data.error || 'что-то пошло не так'));
+      } else {
+        addMessageEl('bot', data.reply);
+        pushMessage('assistant', data.reply);
+      }
+    } catch (err) {
+      typingEl.remove();
+      addMessageEl('bot', 'Не удалось связаться с сервером. Проверьте подключение.');
+    }
+  }
+
+  async function handleImageRequest(prompt) {
+    const typingEl = addMessageEl('bot', 'рисую...');
+    typingEl.classList.add('typing');
+
+    try {
+      const res = await fetch(API_URL + '/api/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await res.json();
+
+      typingEl.remove();
+
+      if (!res.ok) {
+        addMessageEl('bot', 'Ошибка: ' + (data.error || 'не удалось сгенерировать изображение'));
+      } else {
+        addMessageEl('bot', data.imageUrl, 'image');
+        pushMessage('assistant', data.imageUrl, 'image');
+      }
+    } catch (err) {
+      typingEl.remove();
+      addMessageEl('bot', 'Не удалось связаться с сервером. Проверьте подключение.');
+    }
+  }
+
+  sendBtn.addEventListener('click', sendMessage);
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+  inputEl.addEventListener('input', () => {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+  });
+
+  // ---------- Инициализация ----------
+  (function init() {
+    if (sessions.length === 0) {
+      createSession();
+    } else {
+      currentSessionId = sessions.sort((a, b) => b.updatedAt - a.updatedAt)[0].id;
+      renderSessionList();
+      renderMessages();
+    }
+  })();
+</script>
+</body>
+</html>
